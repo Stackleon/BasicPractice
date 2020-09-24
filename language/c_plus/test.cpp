@@ -6,77 +6,146 @@
 using namespace std;
 
 
-#define ELEMENT_SIZE 3
-#define CARPLAY_ELEMENT_ID_FLAG 0x00
+#define MAX_PROPERTY_VALUE_SIZE 96
+
+#define CARPLAY_ELEMENT_SIZE 7
+
+#define CARPLAY_ELEMENT_ID_FLAGS 0x00
 #define CARPLAY_ELEMENT_ID_NAME 0x01
-#define CARPLAY_ELEMENT_ID_MANUFACTURE 0x02
+#define CARPLAY_ELEMENT_ID_MANUFACTURER 0x02
+#define CARPLAY_ELEMENT_ID_MODEL 0x03
+#define CARPLAY_ELEMENT_ID_OUI 0x04
+#define CARPLAY_ELEMENT_ID_BLUETOOTH_MAC 0x05 //
+#define CARPLAY_ELEMENT_ID_DEVICE_ID 0x06
 
-
-
-struct Element {
-    const uint8_t* payload;
-    uint8_t len;
-    uint8_t id;
+struct CarplayElement {
+	uint8_t id;
+	int len;
+	const uint8_t* payload;
 };
 
-struct CarplayIE {
-    uint8_t id;
-    int len;
-    const uint8_t* oui;
-    uint8_t sub_type;
-    const Element* elements;
+struct CarplayOverallElement {
+	uint8_t id;
+	int len;
+	const uint8_t* OUI;
+	uint8_t sub_type;
+	const CarplayElement* elements;
 };
 
-static uint8_t OUI[3] = {0x00, 0xA0, 0x40};
+std::string createBeaconForCarplay(const std::string& normal_conf) {
+	/*
+	const char bt_addr[MAX_PROPERTY_VALUE_SIZE]
+	int read_bt_addr_state = property_get("persist.bluetooth.address", bt_addr);
+	if (read_bt_addr_state <= 0) {
+		return normal_conf;
+	}
+	wpa_printf(MSG_DEBUG, " get bluetooth address:%s", bt_addr);
+	std::vector<char> bt_addr_vector;
+	char* addr_bit = NULL
+	do {
+		char* addr_bit = std::strtok(bt_addr,":");
+		bt_addr_vector.push_back(*addr_bit);
+		//TODO should check bt address big-endian/little-endian
+	} while(addr_bit != NULL)
+	*/
+
+	CarplayOverallElement overall_elements;
+	memset(&overall_elements, 0, sizeof(overall_elements));
+
+    const uint8_t apple_oui[3] = {0x00, 0xA0, 0x40};
+
+	overall_elements.id = 0xDD;
+	overall_elements.OUI = apple_oui;
+	overall_elements.sub_type = 0x00;
+
+	CarplayElement elements[CARPLAY_ELEMENT_SIZE];
+	int payload_size = 0;
+	int element_default_len = 2;
+	for(int i = 0; i < CARPLAY_ELEMENT_SIZE; i++) {
+		CarplayElement element;
+		vector<uint8_t> payload;
+		memset(&element, 0, sizeof(element));
+		switch (i) 
+		{
+			case CARPLAY_ELEMENT_ID_FLAGS:
+			element.id = CARPLAY_ELEMENT_ID_FLAGS;
+			payload = {0x00, 0x40};
+			element.payload = payload.data();
+			element.len = payload.size();
+			payload_size += (payload.size() + element_default_len);
+			break;
+			case CARPLAY_ELEMENT_ID_NAME:
+			element.id = CARPLAY_ELEMENT_ID_NAME;
+			payload = {0x46, 0x6f, 0x72, 0x64};
+			element.payload = payload.data();
+			element.len = payload.size();
+			payload_size += (payload.size() + element_default_len);
+			break;
+			case CARPLAY_ELEMENT_ID_MANUFACTURER:
+			element.id = CARPLAY_ELEMENT_ID_MANUFACTURER;
+			payload = {0x59, 0x61, 0x6e, 0x66, 0x65, 0x6e, 0x67};
+			element.payload = payload.data();
+			element.len = payload.size();
+			payload_size += (payload.size() + element_default_len);
+			break;
+			case CARPLAY_ELEMENT_ID_MODEL:
+			element.id = CARPLAY_ELEMENT_ID_MODEL;
+			payload = {0x50, 0x55, 0x31, 0x37, 0x32, 0x33, 0x55, 0x41};
+			element.len = payload.size();
+			element.payload = payload.data();
+			payload_size += (payload.size() + element_default_len);
+			break;
+			case CARPLAY_ELEMENT_ID_OUI:
+			element.id = CARPLAY_ELEMENT_ID_OUI;
+			element.len = payload.size();
+			element.payload = apple_oui;
+			payload_size += (payload.size() + element_default_len);
+			break;
+			case CARPLAY_ELEMENT_ID_BLUETOOTH_MAC:
+			element.id = CARPLAY_ELEMENT_ID_BLUETOOTH_MAC+1;
+			payload = {0x50, 0x55, 0x31, 0x37, 0x32, 0x33};
+			element.len = payload.size();
+			element.payload = payload.data();
+			payload_size += (payload.size() + element_default_len);
+			break;
+			case CARPLAY_ELEMENT_ID_DEVICE_ID:
+			element.id = CARPLAY_ELEMENT_ID_DEVICE_ID+1;
+			payload = {0x50, 0x55, 0x31, 0x37, 0x32, 0x33};
+			element.len = payload.size();
+			element.payload = payload.data();
+			payload_size += (payload.size() + element_default_len);
+			break;
+			default:
+			break;
+		}
+		elements[i] = element;
+	}
+	overall_elements.len = payload_size;
+	overall_elements.elements = elements;
+}
 
 /**
- * 在使用uint8_t 作为长度的时候。通过cout无法输出长度，需要调查。
- * 
- * 
+* split a string
 */
-void putCarplayBeacon() {
-    CarplayIE carplayIE;
-    memset(&carplayIE, 0 ,sizeof(carplayIE));
-    carplayIE.id = 0xDD;
-    carplayIE.oui = OUI;
-    carplayIE.sub_type = 0x00;
-
-    Element elements_p[ELEMENT_SIZE];
-    int len = 0;
-    for(int i = 0; i < ELEMENT_SIZE; i++) {
-        Element element;
-        memset(&element, 0, sizeof(element));
-        vector<uint8_t> payload;
-        switch (i)
-        {
-        case CARPLAY_ELEMENT_ID_FLAG:
-            element.id = CARPLAY_ELEMENT_ID_FLAG;
-            payload = {0x00, 0x40};
-            element.payload = payload.data();
-            element.len = payload.size();
-            len += (element.len + 2);
-            break;
-        case CARPLAY_ELEMENT_ID_NAME:
-            element.id = CARPLAY_ELEMENT_ID_FLAG;
-            payload = {0x46, 0x6f, 0x72, 0x64};
-            element.payload = payload.data();
-            element.len = payload.size();
-            len += (element.len + 2);
-            break;
-        case CARPLAY_ELEMENT_ID_MANUFACTURE:
-            element.id = CARPLAY_ELEMENT_ID_FLAG;
-            payload = {0x59, 0x61, 0x6e, 0x66, 0x65, 0x6e, 0x67};
-            element.payload = payload.data();
-            element.len = payload.size();
-            len += (element.len + 2);
-            break;    
-        default:
-            break;
-        }
-        elements_p[i] = element;
+std::vector<uint8_t> convertBtaddress(const std::string &s, char c) {
+    std::vector<uint8_t> components;
+    size_t startPos = 0;
+    size_t matchPos;
+    while ((matchPos = s.find(c, startPos)) != std::string::npos) {
+		char* temp = nullptr;
+		const char* target = s.substr(startPos, matchPos - startPos).c_str();
+		uint8_t value = (uint8_t) strtol( target, &temp, 16);
+        components.push_back(value);
+        startPos = matchPos + 1;
     }
-    carplayIE.elements = elements_p;
-    carplayIE.len = len;
+
+    if (startPos <= s.length()) {
+		char* temp = nullptr;
+		const char* target = s.substr(startPos).c_str();
+		uint8_t value = (uint8_t)strtol(target, &temp, 16);
+        components.push_back(value);
+    }
+    return components;
 }
 
 
@@ -115,7 +184,7 @@ void cal_struct_size() {
 
 
 int main() {
-    putCarplayBeacon();
+    createBeaconForCarplay();
     return 0;
 }
 
